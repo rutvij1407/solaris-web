@@ -12,7 +12,7 @@ A browser based globe that shows live aircraft, satellites and earthquakes, with
 
 **How it works**
 
-Next.js API routes fetch each feed on the server, shape the data and cache responses for a few seconds so the public APIs are not hit on every page view. A Zustand store holds the layer state, and Mapbox GL draws the globe.
+Next.js API routes fetch each feed on the server, shape the data and cache responses for a few seconds so the public APIs are not hit on every page view. A Zustand store holds the layer state, and MapLibre GL draws the globe.
 
 **Tech stack**
 
