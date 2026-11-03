@@ -4,7 +4,7 @@ A browser based globe that shows live aircraft, satellites and earthquakes, with
 
 **What it does**
 
-* Plots live aircraft positions from the OpenSky Network.
+* Plots live aircraft positions from the OpenSky Network, with the open adsb.lol feed as a backup.
 * Plots satellite positions from CelesTrak.
 * Shows recent earthquakes from the USGS feed.
 * Overlays precipitation radar from RainViewer.
@@ -16,13 +16,14 @@ Next.js API routes fetch each feed on the server, shape the data and cache respo
 
 **Tech stack**
 
-Next.js 16, React 18, TypeScript, Mapbox GL, Zustand, Tailwind CSS, deployed on Vercel.
+Next.js 16, React 18, TypeScript, MapLibre GL, Zustand and Tailwind CSS, deployed on Vercel.
 
 **Run it locally**
 
 1. Install packages with npm install.
-2. Create a file called .env.local containing a free Mapbox token named NEXT_PUBLIC_MAPBOX_TOKEN.
-3. Start the app with npm run dev and open localhost on port 3000.
+2. Start the app with npm run dev and open localhost on port 3000.
+
+No API keys or tokens are needed. The globe uses Esri World Imagery tiles and place search uses OpenStreetMap Nominatim.
 
 The production build passes with npm run build.
 

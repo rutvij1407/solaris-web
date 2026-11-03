@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useStore } from '@/lib/store'
 import type { Flight, Earthquake, Satellite } from '@/lib/types'
 import { APP_CONFIG } from '@/lib/constants'
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
 function makePlaneImageData(): { width: number; height: number; data: Uint8Array } {
   const size = 32
@@ -165,7 +165,7 @@ interface GeocodingFeature {
 
 export default function CesiumGlobe() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
   const fetchIntervalsRef = useRef<ReturnType<typeof setInterval>[]>([])
   const [mapLoaded, setMapLoaded] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -223,11 +223,18 @@ export default function CesiumGlobe() {
     if (!query.trim()) { setSearchResults([]); setShowResults(false); return }
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
+        // Place search uses OpenStreetMap Nominatim, which needs no API key.
         const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&types=place,region,country,address,poi`
+          `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query)}`
         )
-        const data = await res.json()
+        const raw: { place_id: number; display_name: string; lon: string; lat: string }[] = await res.json()
+        const data = {
+          features: raw.map((r) => ({
+            id: String(r.place_id),
+            place_name: r.display_name,
+            center: [parseFloat(r.lon), parseFloat(r.lat)] as [number, number],
+          })),
+        }
         setSearchResults(data.features ?? [])
         setShowResults(true)
       } catch { setSearchResults([]) }
@@ -247,30 +254,47 @@ export default function CesiumGlobe() {
   useEffect(() => {
     if (!containerRef.current) return
 
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ''
-
-    const map = new mapboxgl.Map({
+    // No tokens needed: Esri World Imagery tiles on a MapLibre globe.
+    const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      style: {
+        version: 8,
+        projection: { type: 'globe' },
+        sources: {
+          imagery: {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+          },
+        },
+        layers: [
+          { id: 'background', type: 'background', paint: { 'background-color': '#050510' } },
+          { id: 'imagery', type: 'raster', source: 'imagery' },
+        ],
+      } as any,
       center: [-77.0369, 38.9072],
       zoom: 3,
-      maxZoom: 22,
-      projection: 'globe' as any,
-      antialias: true,
-      attributionControl: false,
+      maxZoom: 18,
+      attributionControl: { compact: true },
     })
 
     mapRef.current = map
 
     map.on('load', () => {
       // Space atmosphere
-      ;(map as any).setFog({
-        color: '#0a0a0a',
-        'high-color': '#000010',
-        'horizon-blend': 0.04,
-        'space-color': '#050510',
-        'star-intensity': 0.5,
-      })
+      try {
+        ;(map as any).setSky?.({
+          'sky-color': '#050510',
+          'horizon-color': '#0a0a2a',
+          'fog-color': '#0a0a0a',
+          'sky-horizon-blend': 0.5,
+          'horizon-fog-blend': 0.5,
+          'fog-ground-blend': 0.2,
+          'atmosphere-blend': 0.8,
+        })
+      } catch { /* sky is optional */ }
 
       // Plane icon
       const plane = makePlaneImageData()
@@ -419,7 +443,7 @@ export default function CesiumGlobe() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
-    ;(map as any).setProjection(is2DMode ? 'mercator' : 'globe')
+    ;(map as any).setProjection({ type: is2DMode ? 'mercator' : 'globe' })
   }, [is2DMode, mapLoaded])
 
   // Data fetching intervals
@@ -449,7 +473,7 @@ export default function CesiumGlobe() {
     const visible = activeLayers.includes('flights')
     map.setLayoutProperty('flights-layer', 'visibility', visible ? 'visible' : 'none')
     if (!visible) return
-    ;(map.getSource('flights-src') as mapboxgl.GeoJSONSource)?.setData({
+    ;(map.getSource('flights-src') as maplibregl.GeoJSONSource)?.setData({
       type: 'FeatureCollection',
       features: flights
         .filter((f: Flight) => f.longitude != null && f.latitude != null)
@@ -468,7 +492,7 @@ export default function CesiumGlobe() {
     const visible = activeLayers.includes('earthquakes')
     map.setLayoutProperty('earthquakes-layer', 'visibility', visible ? 'visible' : 'none')
     if (!visible) return
-    ;(map.getSource('earthquakes-src') as mapboxgl.GeoJSONSource)?.setData({
+    ;(map.getSource('earthquakes-src') as maplibregl.GeoJSONSource)?.setData({
       type: 'FeatureCollection',
       features: earthquakes
         .filter((eq: Earthquake) => eq.longitude != null && eq.latitude != null)
@@ -487,7 +511,7 @@ export default function CesiumGlobe() {
     const visible = activeLayers.includes('satellites')
     map.setLayoutProperty('satellites-layer', 'visibility', visible ? 'visible' : 'none')
     if (!visible) return
-    ;(map.getSource('satellites-src') as mapboxgl.GeoJSONSource)?.setData({
+    ;(map.getSource('satellites-src') as maplibregl.GeoJSONSource)?.setData({
       type: 'FeatureCollection',
       features: satellites
         .filter((s: Satellite) => s.longitude != null && s.latitude != null)
@@ -515,7 +539,7 @@ export default function CesiumGlobe() {
         features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: {} })
       })
     })
-    ;(map.getSource('orbits-src') as mapboxgl.GeoJSONSource)?.setData({
+    ;(map.getSource('orbits-src') as maplibregl.GeoJSONSource)?.setData({
       type: 'FeatureCollection', features,
     })
   }, [satellites, activeLayers, mapLoaded])
@@ -530,8 +554,8 @@ export default function CesiumGlobe() {
     if (!visible) return
 
     const updateTerminator = () => {
-      ;(map.getSource('night-fill-src') as mapboxgl.GeoJSONSource)?.setData(getNightFillGeoJSON())
-      ;(map.getSource('terminator-src') as mapboxgl.GeoJSONSource)?.setData(getTerminatorLineGeoJSON())
+      ;(map.getSource('night-fill-src') as maplibregl.GeoJSONSource)?.setData(getNightFillGeoJSON())
+      ;(map.getSource('terminator-src') as maplibregl.GeoJSONSource)?.setData(getTerminatorLineGeoJSON())
     }
     updateTerminator()
     const id = setInterval(updateTerminator, 60000)
